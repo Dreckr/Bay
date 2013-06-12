@@ -93,6 +93,9 @@ class ServiceBinding {
   Service getService () {
     var service;
     
+    if (this._binding == null)
+      throw new Exception('No binding defined for service');
+    
     if (this.scope == ServiceScope.REQUEST)
       service = this._binding.newInstance();
     else if(this.scope == ServiceScope.SINGLETON)
