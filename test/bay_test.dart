@@ -12,7 +12,7 @@ class TestModule extends ServiceModule {
   
   String message = 'Dart is awesome!';
   
-  void configureServices () {
+  TestModule () : super() {
     serve('/foo').using(AbstractRandomService).scopedIn(ServiceScope.SINGLETON);
     
     bind(AbstractRandomService).to(TestRandomService);

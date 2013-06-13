@@ -20,7 +20,6 @@ abstract class ServiceModule extends Module {
   ServiceModule() : super() {
     this._router = new Router();
     this.bind(Router).to(this._router);
-    this.configureServices();
   }
   
   ServiceModule.childOf(Module parent) : super.childOf(parent) {
@@ -31,10 +30,7 @@ abstract class ServiceModule extends Module {
       this.bind(Router).to(this._router);
     }
     
-    this.configureServices();
   }
-  
-  void configureServices ();
   
   ServiceBinding serve (Object path) {
     var uri;
