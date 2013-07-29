@@ -1,43 +1,52 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:bay/bay.dart';
+import 'package:dado/dado.dart';
+import 'package:route/url_pattern.dart';
 
 void main () {
-  TestModule module = new TestModule();
-  
-  HttpServer.bind('127.0.0.1', 7070).then((server) => module.listenOn(server));
-
+  var injector = new Injector([BayModule1]);
+  injector.getInstanceOf(Application);
 }
 
-class TestModule extends ServiceModule {
+class Injectable {
+  String test;
   
-  String message = 'Dart is awesome!';
+  Injectable (String this.test);
+}
+
+const B = 'b';
+
+abstract class BayModule1 extends BayModule {
+  String bla = 'a';
+  @B String asdasd = 'b';
+  Injectable injectable ();
   
-  TestModule () : super() {
-    serve('/foo').using(AbstractRandomService).scopedIn(ServiceScope.SINGLETON);
-    
-    bind(AbstractRandomService).to(TestRandomService);
+  Application newApplication();
+  
+  @GET
+  @Serve(r'/test/(\d+)')
+  Service1 newService1();
+}
+
+class Application {
+  BayRouter router;
+  
+  Application (BayRouter this.router) {
+    HttpServer.bind('127.0.0.1', 1234).then((server) {
+      router.bind(server);
+    });
   }
-  
 }
 
-abstract class AbstractRandomService extends Service {
+class Service1 extends Service {
+  Injectable injectable;
   
-  String message;
+  Service1 (Injectable this.injectable);
   
-  void service (HttpRequest request, HttpResponse response);
-}
-
-class TestRandomService extends AbstractRandomService {
-  
-  String message;
-  int called = 0;
-  
-  TestRandomService (String this.message);
-  
-  void service (HttpRequest request, HttpResponse response) {
-    this.called++;
-    response.write(message + '\nThis service has been called $called times');
+  void serve (HttpRequest request, HttpResponse response) {
+    response.write('Hello, Bay! Injectable was '
+        '${(injectable != null ? '' : 'not ')}injected');
     response.close();
   }
-  
 }

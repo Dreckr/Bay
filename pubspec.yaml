@@ -6,11 +6,12 @@ homepage: https://github.com/Dreckr/Bay
 environment:
   sdk: '>=0.5.16'
 dependencies:
-  creek: 0.0.2
   dado:
     git:
-      ref: experimental
-      url: git://github.com/dart-lang/dado.git
+      ref: extensibility
+      url: https://github.com/Dreckr/dado.git
+  inject: any
+  route: any
 dev_dependencies:
   unittest: '>=0.5.0'
 
