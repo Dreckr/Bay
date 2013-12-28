@@ -2,51 +2,40 @@ import 'dart:async';
 import 'dart:io';
 import 'package:bay/bay.dart';
 import 'package:dado/dado.dart';
-import 'package:route/url_pattern.dart';
 
 void main () {
-  var injector = new Injector([BayModule1]);
-  injector.getInstanceOf(Application);
+  var injector = new Injector([TestModule]);
+  Bay.init(injector, port: 7070);
 }
 
-class Injectable {
-  String test;
+abstract class TestModule extends DeclarativeModule {
+  String string = "WTF??!";
   
-  Injectable (String this.test);
+  TestResource testResource();
+  
+  TestFilter testFilter();
 }
 
-const B = 'b';
 
-abstract class BayModule1 extends BayModule {
-  String bla = 'a';
-  @B String asdasd = 'b';
-  Injectable injectable ();
-  
-  Application newApplication();
+@Path("/test")
+class TestResource {
   
   @GET
-  @Serve(r'/test/(\d+)')
-  Service1 newService1();
-}
-
-class Application {
-  BayRouter router;
-  
-  Application (BayRouter this.router) {
-    HttpServer.bind('127.0.0.1', 1234).then((server) {
-      router.bind(server);
-    });
+  String test () {
+    return "test";
   }
 }
 
-class Service1 extends Service {
-  Injectable injectable;
+@Filter("/test")
+class TestFilter implements ResourceFilter {
+  String testString;
   
-  Service1 (Injectable this.injectable);
+  TestFilter (String this.testString);
   
-  void serve (HttpRequest request, HttpResponse response) {
-    response.write('Hello, Bay! Injectable was '
-        '${(injectable != null ? '' : 'not ')}injected');
-    response.close();
+  Future<HttpRequest> filter(HttpRequest httpRequest) {
+    httpRequest.response.writeln(testString);
+    
+    return new Future.value(httpRequest);
   }
+  
 }
