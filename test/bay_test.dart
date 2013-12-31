@@ -2,14 +2,20 @@ import 'dart:async';
 import 'dart:io';
 import 'package:bay/bay.dart';
 import 'package:dado/dado.dart';
+import 'package:logging/logging.dart';
 
 void main () {
   var injector = new Injector([TestModule]);
   Bay.init(injector, port: 7070);
+  
+  Logger.root.level = Level.CONFIG;
+  Logger.root.onRecord.listen((LogRecord rec) {
+    print('${rec.level.name}: ${rec.time}: ${rec.message}');
+  });
 }
 
 abstract class TestModule extends DeclarativeModule {
-  String string = "WTF??!";
+  String string = "I'm a FILTER!";
   
   TestResource testResource();
   
@@ -20,8 +26,21 @@ abstract class TestModule extends DeclarativeModule {
 @Path("/test")
 class TestResource {
   
+  TestResource();
+  
   @GET
-  String test () {
+  String rootTest() {
+    return "Woot \o/";
+  }
+  
+  @Path("/what")
+  String test() {
+    return "test what?";
+  }
+  
+  @POST
+  @Path("/what")
+  String postTest() {
     return "test";
   }
 }
@@ -30,7 +49,7 @@ class TestResource {
 class TestFilter implements ResourceFilter {
   String testString;
   
-  TestFilter (String this.testString);
+  TestFilter(String this.testString);
   
   Future<HttpRequest> filter(HttpRequest httpRequest) {
     httpRequest.response.writeln(testString);

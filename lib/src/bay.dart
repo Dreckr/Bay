@@ -2,31 +2,49 @@ library bay.core;
 
 import 'dart:async';
 import 'dart:io';
+import 'package:logging/logging.dart';
 import 'package:dado/dado.dart';
 import 'exceptions.dart';
 import 'router.dart';
 
+final _coreLogger = new Logger("bay.core");
+
 class Bay {
+  static final _logger = new Logger("bay.core.Bay");
   final HttpServer httpServer;
   final Injector injector;
   Router router;
-  ResourceScanner resourceScanner;
   
   Bay._(Injector this.injector, HttpServer this.httpServer) {
-    router = new Router(injector);
+    _logger.config("Bay started");
+    _logger.config("Address: ${httpServer.address}");
+    _logger.config("Port: ${httpServer.port}");
+    
+    router = new Router(this);
     
     httpServer.listen(
       (httpRequest) {
+        _logger.finer("Receiving HttpRequest from "
+                       "${httpRequest.connectionInfo.remoteAddress}");
         router.handleRequest(httpRequest).then(
-            (httpRequest) {},
+            (httpRequest) {
+              _logger.finer("Responded HttpRequest from "
+                  "${httpRequest.connectionInfo.remoteAddress}");
+            },
             onError: (error) {
               if (error is ResourceNotFoundException) {
-                httpRequest.response.statusCode = 404;
+                _logger.finer("Resource not found: ${error.path}", error);
+                if (httpRequest.response.contentLength == 0) {
+                  httpRequest.response.statusCode = 404;
+                }
                 httpRequest.response.write("Not found");
                 httpRequest.response.close();
               } else {
-                print(error);
-                httpRequest.response.statusCode = 500;
+                _logger.severe("Unknown error: $error", error);
+                if (httpRequest.response.contentLength == 0) {
+                  httpRequest.response.statusCode = 500;
+                }
+                
                 httpRequest.response.write("Internal Error");
                 httpRequest.response.close();
               }
