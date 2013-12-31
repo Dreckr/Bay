@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:logging/logging.dart';
 import 'package:dado/dado.dart';
-import 'exceptions.dart';
 import 'router.dart';
 
 final _coreLogger = new Logger("bay.core");
@@ -47,6 +46,7 @@ class Bay {
                 
                 httpRequest.response.write("Internal Error");
                 httpRequest.response.close();
+                
               }
             }
         );

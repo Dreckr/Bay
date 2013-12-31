@@ -20,19 +20,50 @@ const Method PUT = const Method("PUT");
 class Method {
   final String method;
   
-  const Method(String this.method);
+  const Method(this.method);
 }
 
 class Consumes {
   final List<String> mediaTypes;
   
-  const Consumes (List<String> this.mediaTypes);
+  const Consumes(this.mediaTypes);
 }
 
 class Produces {
   final List<String> mediaTypes;
   
-  const Produces (List<String> this.mediaTypes);
+  const Produces (this.mediaTypes);
 }
 
-// TODO: PathParam, QueryParam, BodyParam, CookieParam, DefaultValue
+class PathParam {
+  final String param;
+  
+  const PathParam(this.param);
+}
+
+class QueryParam {
+  final String param;
+  
+  const QueryParam(this.param);
+}
+
+class HeaderParam {
+  final String param;
+  
+  const HeaderParam(this.param);
+}
+
+
+class CookieParam {
+  final String param;
+  
+  const CookieParam(this.param);
+}
+
+class DefaultValue {
+  final String value;
+  
+  const DefaultValue(this.value);
+}
+
+// TODO: FormParam

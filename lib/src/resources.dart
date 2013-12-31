@@ -1,7 +1,5 @@
 library bay.resources;
 
-import 'dart:async';
-import 'dart:io';
 import 'dart:mirrors';
 import 'package:dado/dado.dart';
 import 'package:logging/logging.dart';
@@ -40,44 +38,23 @@ class ResourceScanner {
   
 }
 
-class ResourceExecutor {
-  final Bay bay;
-  
-  ResourceExecutor(this.bay);
-  
-  Future<HttpRequest> execute(Resource resourceDescriptor, 
-                               HttpRequest httpRequest) {
-    var resourceObject = 
-        bay.injector.getInstanceOfKey(resourceDescriptor.bindingKey);
-    var resourceMirror = reflect(resourceObject);
-    
-  }
-  
-  MethodMirror _findMethod(ClassMirror classMirror, HttpRequest httpRequest) {
-    classMirror.declarations.forEach(
-      (name, declaration) {
-        
-    });
-  }
-  
-}
-
 class Resource {
   final String path;
   final UriPattern pathPattern;
   final Key bindingKey;
   List<ResourceMethod> methods = new List();
-  ClassMirror _resourceMirror;
+  final ClassMirror classMirror;
   
-  Resource(String path, Key this.bindingKey) :
+  Resource(String path, Key bindingKey) :
     path = path,
-    pathPattern = new UriParser(new UriTemplate(path)) {
-    _resourceMirror = reflectClass(bindingKey.type);
+    pathPattern = new UriParser(new UriTemplate(path)),
+    bindingKey = bindingKey,
+    classMirror = reflectClass(bindingKey.type) {
     _mapMethods();
   }
   
   void _mapMethods() {
-    _resourceMirror.declarations.forEach(
+    classMirror.declarations.forEach(
       (name, declaration) {
         if (declaration is MethodMirror) {
           var pathMetadataMirror = declaration.metadata.firstWhere(
@@ -111,21 +88,25 @@ class Resource {
 }
 
 class ResourceMethod {
-  final Resource parent;
+  final Resource owner;
   final Symbol name;
   final String path;
   final UriPattern pathPattern;
   final String method;
+  final MethodMirror methodMirror;
   
-  ResourceMethod(Resource parent, 
-                 Symbol this.name,
+  ResourceMethod(Resource owner, 
+                 Symbol name,
                  String path,
                  String this.method) :
-                   parent = parent,
+                   owner = owner,
                    path = path,
                    pathPattern = 
-                   new UriParser(new UriTemplate(parent.path + path));
-  
+                   new UriParser(new UriTemplate(owner.path + path)),
+                   name = name,
+                   methodMirror = 
+                   owner.classMirror.declarations[name];
+
 }
 
 String normalizePath(String path) {
@@ -134,7 +115,7 @@ String normalizePath(String path) {
   }
   
   if (path.endsWith("/")) {
-    path = path.substring(0, path.length - 2);
+    path = path.substring(0, path.length - 1);
   }
   
   return path;

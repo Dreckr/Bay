@@ -6,22 +6,24 @@ import 'dart:mirrors';
 import 'package:dado/dado.dart';
 import 'package:uri/uri.dart';
 import 'bay.dart';
-import 'errors.dart';
-import 'exceptions.dart';
 import 'filters.dart';
+import 'parameters.dart';
 import 'resources.dart';
 
 class Router {
   final Bay bay;
   List<Resource> resources;
   Map<UriPattern, Key> filters;
-  ResourceScanner resourceScanner;
-  FilterScanner filterScanner;
+  final ResourceScanner resourceScanner;
+  final FilterScanner filterScanner;
+  final ParameterResolver parameterResolver;
   
-  Router(this.bay) {
-    resourceScanner = new ResourceScanner(bay);
-    filterScanner = new FilterScanner(bay);
-    
+  Router(Bay bay) : 
+      bay = bay,
+      resourceScanner = new ResourceScanner(bay),
+      filterScanner = new FilterScanner(bay),
+      parameterResolver = new ParameterResolver(bay) {
+
     resources = resourceScanner.scanResources();
     filters = filterScanner.scanFilters();
   }
@@ -80,7 +82,7 @@ class Router {
     return completer.future;
   }
   
-  // TODO(diego): Should we replace this with a chain of responsability?
+  // TODO(diego): Should be replaced with a chain of responsability?
   Future<HttpRequest> _iterateThroughFilters(
                        Iterator<ResourceFilter> resourceFilterIterator, 
                        HttpRequest httpRequest,
@@ -158,10 +160,17 @@ class Router {
     
     try {
       var resourceObject = 
-          bay.injector.getInstanceOfKey(resourceMethod.parent.bindingKey);
+          bay.injector.getInstanceOfKey(resourceMethod.owner.bindingKey);
       
       var resourceMirror = reflect(resourceObject);
-      var response = resourceMirror.invoke(resourceMethod.name, []).reflectee;
+      var parameterResolution = 
+          parameterResolver.resolveParameters(resourceMethod, httpRequest);
+      
+      var response = 
+          resourceMirror.invoke(resourceMethod.name, 
+                                parameterResolution.positionalArguments,
+                                parameterResolution.namedArguments).reflectee;
+      
       httpRequest.response.write(response);
       httpRequest.response.close();
       completer.complete(httpRequest);
@@ -171,5 +180,23 @@ class Router {
     
     return completer.future;
   }
+  
+}
+
+class ResourceNotFoundException implements Exception {
+  final String path;
+  
+  ResourceNotFoundException(String this.path);
+  
+  String toString() => "Resource not found for: $path";
+  
+}
+
+class MultipleMatchingResourcesError extends Error {
+  final String path;
+  
+  MultipleMatchingResourcesError(String this.path);
+  
+  String toString() => "Multiple resources matching: $path";
   
 }
