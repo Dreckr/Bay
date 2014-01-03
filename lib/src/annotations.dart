@@ -22,18 +22,18 @@ class Method {
   
   const Method(this.method);
 }
-
-class Consumes {
-  final List<String> mediaTypes;
-  
-  const Consumes(this.mediaTypes);
-}
-
-class Produces {
-  final List<String> mediaTypes;
-  
-  const Produces (this.mediaTypes);
-}
+//
+//class Consumes {
+//  final List<String> mediaTypes;
+//  
+//  const Consumes(this.mediaTypes);
+//}
+//
+//class Produces {
+//  final List<String> mediaTypes;
+//  
+//  const Produces (this.mediaTypes);
+//}
 
 class PathParam {
   final String param;
@@ -56,8 +56,14 @@ class HeaderParam {
 
 class CookieParam {
   final String param;
-  
+
   const CookieParam(this.param);
+}
+
+class FormParam {
+  final String param;
+
+  const FormParam(this.param);
 }
 
 class DefaultValue {

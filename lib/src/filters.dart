@@ -1,10 +1,10 @@
 library bay.filters;
 
 import 'dart:async';
-import 'dart:io';
 import 'dart:mirrors';
 import 'package:dado/dado.dart';
 import 'package:uri/uri.dart';
+import 'package:http_server/http_server.dart';
 import 'annotations.dart';
 import 'bay.dart';
 
@@ -36,6 +36,6 @@ class FilterScanner {
 
 abstract class ResourceFilter {
   
-  Future<HttpRequest> filter(HttpRequest httpRequest);
+  Future<HttpRequestBody> filter(HttpRequestBody httpRequestBody);
   
 }

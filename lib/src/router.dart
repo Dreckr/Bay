@@ -2,12 +2,13 @@ library bay.router;
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:mirrors';
 import 'package:dado/dado.dart';
 import 'package:uri/uri.dart';
+import 'package:http_server/http_server.dart';
 import 'bay.dart';
 import 'filters.dart';
-import 'parameters.dart';
+import 'responses.dart';
+import 'requests.dart';
 import 'resources.dart';
 
 class Router {
@@ -16,30 +17,36 @@ class Router {
   Map<UriPattern, Key> filters;
   final ResourceScanner resourceScanner;
   final FilterScanner filterScanner;
-  final ParameterResolver parameterResolver;
+  final RequestHandler requestHandler;
+  final ResponseHandler responseHandler;
   
   Router(Bay bay) : 
       bay = bay,
       resourceScanner = new ResourceScanner(bay),
       filterScanner = new FilterScanner(bay),
-      parameterResolver = new ParameterResolver(bay) {
+      requestHandler = new RequestHandler(bay),
+      responseHandler = new ResponseHandler(bay) {
 
     resources = resourceScanner.scanResources();
     filters = filterScanner.scanFilters();
   }
   
-  Future<HttpRequest> handleRequest(HttpRequest httpRequest) {
-    var completer = new Completer<HttpRequest>();
+  Future<HttpRequestBody> handleRequest(HttpRequestBody httpRequestBody) {
+    var completer = new Completer<HttpRequestBody>();
     
     var resourceMethod;
     try {
-      resourceMethod = _findResourceMethod(httpRequest);
+      resourceMethod = _findResourceMethod(httpRequestBody);
+
+      if (resourceMethod == null) {
+        throw new ResourceNotFoundException(httpRequestBody.request.uri.path);
+      }
     } catch (e) {
       completer.completeError(e);
       return completer.future;
     }
     
-    _applyFilters(httpRequest).then(
+    _applyFilters(httpRequestBody).then(
       (httpRequest) {
         _callResourceMethod(resourceMethod, httpRequest).then(
           (httpRequest) {
@@ -50,12 +57,12 @@ class Router {
     return completer.future;
   }
   
-  Future<HttpRequest> _applyFilters(HttpRequest httpRequest) {
-    var completer = new Completer<HttpRequest>();
+  Future<HttpRequestBody> _applyFilters(HttpRequestBody httpRequestBody) {
+    var completer = new Completer<HttpRequestBody>();
     var matchingFilters = new List<ResourceFilter>();
     filters.forEach(
       (pattern, key) {
-        if (pattern.matches(httpRequest.uri)) {
+        if (pattern.matches(httpRequestBody.request.uri)) {
           var resourceFilter;
           
           try {
@@ -74,7 +81,7 @@ class Router {
       return completer.future;
     }
     
-    _iterateThroughFilters(matchingFilters.iterator, httpRequest).then(
+    _iterateThroughFilters(matchingFilters.iterator, httpRequestBody).then(
         (httpRequest) => completer.complete(httpRequest),
         onError: (error) => completer.completeError(error)
         );
@@ -83,58 +90,59 @@ class Router {
   }
   
   // TODO(diego): Should be replaced with a chain of responsability?
-  Future<HttpRequest> _iterateThroughFilters(
+  Future<HttpRequestBody> _iterateThroughFilters(
                        Iterator<ResourceFilter> resourceFilterIterator, 
-                       HttpRequest httpRequest,
+                       HttpRequestBody httpRequestBody,
                        [Completer completer]) {
     if (completer == null) {
-      completer = new Completer<HttpRequest>();
+      completer = new Completer<HttpRequestBody>();
     }
     
     if (resourceFilterIterator.moveNext()) {
       try {
-        resourceFilterIterator.current.filter(httpRequest).then(
-          (httpRequest) {
+        resourceFilterIterator.current.filter(httpRequestBody).then(
+          (httpRequestBody) {
               _iterateThroughFilters(resourceFilterIterator, 
-                                   httpRequest, 
+                                   httpRequestBody, 
                                    completer);
         }, onError: (error) => completer.completeError(error));
       } catch (error) {
         completer.completeError(error);
       }
     } else {
-      completer.complete(httpRequest);
+      completer.complete(httpRequestBody);
     }
     
     return completer.future;
   }
   
-  ResourceMethod _findResourceMethod(HttpRequest httpRequest) {
+  ResourceMethod _findResourceMethod(HttpRequestBody httpRequestBody) {
     Resource matchingResource;
     ResourceMethod matchingMethod;
+    HttpRequest request = httpRequestBody.request;
     
     resources.forEach(
         (resource) {
-          if (resource.pathPattern.matches(httpRequest.uri)) {
+          if (resource.pathPattern.matches(request.uri)) {
             if (matchingResource == null) {
               matchingResource = resource;
             } else {
-              throw new MultipleMatchingResourcesError(httpRequest.uri.path);
+              throw new MultipleMatchingResourcesError(request.uri.path);
             }
           }
           
           if (matchingResource != null) {
             matchingResource.methods.forEach(
               (method) {
-                var match = method.pathPattern.match(httpRequest.uri);
+                var match = method.pathPattern.match(request.uri);
                 if (match != null && 
                     match.rest.path.length == 0 &&
-                    method.method == httpRequest.method) {
+                    method.method == request.method) {
                   if (matchingMethod == null) {
                     matchingMethod = method;
                   } else {
                     throw 
-                      new MultipleMatchingResourcesError(httpRequest.uri.path);
+                      new MultipleMatchingResourcesError(request.uri.path);
                   }
                 }
               });
@@ -144,39 +152,24 @@ class Router {
     return matchingMethod;
   }
   
-  Future<HttpRequest> _callResourceMethod(ResourceMethod resourceMethod, 
-                                             HttpRequest httpRequest) {
-    var completer = new Completer<HttpRequest>();
-    if (completer.isCompleted) {
-      return completer.future;
-    }
-    
-    if (resourceMethod == null) {
-      completer.completeError(
-          new ResourceNotFoundException(httpRequest.uri.path));
-      
-      return completer.future;
-    }
-    
-    try {
-      var resourceObject = 
-          bay.injector.getInstanceOfKey(resourceMethod.owner.bindingKey);
-      
-      var resourceMirror = reflect(resourceObject);
-      var parameterResolution = 
-          parameterResolver.resolveParameters(resourceMethod, httpRequest);
-      
-      var response = 
-          resourceMirror.invoke(resourceMethod.name, 
-                                parameterResolution.positionalArguments,
-                                parameterResolution.namedArguments).reflectee;
-      
-      httpRequest.response.write(response);
-      httpRequest.response.close();
-      completer.complete(httpRequest);
-    } catch (e) {
-      completer.completeError(e);
-    }
+  Future<HttpRequestBody> _callResourceMethod(ResourceMethod resourceMethod, 
+      HttpRequestBody httpRequestBody) {
+    var completer = new Completer<HttpRequestBody>();
+    requestHandler
+      .handleRequest(resourceMethod, httpRequestBody)
+      .then(
+        (response) =>
+          responseHandler
+            .handleResponse(resourceMethod, httpRequestBody, response)
+        ,onError: (error, stackTrace) => 
+            completer.completeError(error, stackTrace))
+      .then((_) { 
+        if (!completer.isCompleted)
+          completer.complete(httpRequestBody);
+      },
+            onError: (error, stackTrace) => 
+              completer.completeError(error, stackTrace));
+              
     
     return completer.future;
   }

@@ -2,8 +2,9 @@ library bay.core;
 
 import 'dart:async';
 import 'dart:io';
-import 'package:logging/logging.dart';
 import 'package:dado/dado.dart';
+import 'package:logging/logging.dart';
+import 'package:http_server/http_server.dart';
 import 'router.dart';
 
 final _coreLogger = new Logger("bay.core");
@@ -21,31 +22,31 @@ class Bay {
     
     router = new Router(this);
     
-    httpServer.listen(
-      (httpRequest) {
+    httpServer.transform(new HttpBodyHandler()).listen(
+      (HttpRequestBody httpBody) {
         _logger.finer("Receiving HttpRequest from "
-                       "${httpRequest.connectionInfo.remoteAddress}");
-        router.handleRequest(httpRequest).then(
+                       "${httpBody.request.connectionInfo.remoteAddress}");
+        router.handleRequest(httpBody).then(
             (httpRequest) {
               _logger.finer("Responded HttpRequest from "
-                  "${httpRequest.connectionInfo.remoteAddress}");
+                  "${httpRequest.request.connectionInfo.remoteAddress}");
             },
             onError: (error) {
               if (error is ResourceNotFoundException) {
                 _logger.finer("Resource not found: ${error.path}", error);
-                if (httpRequest.response.contentLength == 0) {
-                  httpRequest.response.statusCode = 404;
+                if (httpBody.request.response.contentLength == 0) {
+                  httpBody.request.response.statusCode = 404;
                 }
-                httpRequest.response.write("Not found");
-                httpRequest.response.close();
+                httpBody.request.response.write("Not found");
+                httpBody.request.response.close();
               } else {
                 _logger.severe("Unknown error: $error", error);
-                if (httpRequest.response.contentLength == 0) {
-                  httpRequest.response.statusCode = 500;
+                if (httpBody.request.response.contentLength == 0) {
+                  httpBody.request.response.statusCode = 500;
                 }
                 
-                httpRequest.response.write("Internal Error");
-                httpRequest.response.close();
+                httpBody.request.response.write("Internal Error");
+                httpBody.request.response.close();
                 
               }
             }

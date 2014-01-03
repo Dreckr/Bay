@@ -1,11 +1,57 @@
-library bay.parameters;
+library bay.requests;
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:mirrors';
+import 'package:http_server/http_server.dart';
 import 'package:inject/inject.dart';
+import 'package:model_map/model_map.dart';
 import 'annotations.dart';
 import 'bay.dart';
 import 'resources.dart';
+
+class RequestHandler {
+  final Bay bay;
+  final ParameterResolver parameterResolver;
+  
+  RequestHandler(Bay bay) : bay = bay,
+                            parameterResolver = 
+                              new ParameterResolver(bay);
+  
+  Future handleRequest(ResourceMethod resourceMethod, 
+                         HttpRequestBody httpRequestBody) {
+    var request = httpRequestBody.request;
+    var completer = new Completer();
+    
+    try {
+      var resourceObject = 
+          bay.injector.getInstanceOfKey(resourceMethod.owner.bindingKey);
+      
+      var resourceMirror = reflect(resourceObject);
+      var parameterResolution = 
+          parameterResolver.resolveParameters(resourceMethod, httpRequestBody);
+      
+      var response = 
+          resourceMirror.invoke(resourceMethod.name, 
+                                parameterResolution.positionalArguments,
+                                parameterResolution.namedArguments).reflectee;
+      
+      if (response is Future) {
+        response.then(
+            (value) => completer.complete(value), 
+            onError: (error, stackTrace) => 
+                completer.completeError(error, stackTrace));
+      } else {
+        completer.complete(response);
+      }
+    } catch (error, stackTrace) {
+      completer.completeError(error, stackTrace);
+    }
+    
+    return completer.future;
+  }
+  
+}
 
 class ParameterResolver {
   final Bay bay;
@@ -14,22 +60,27 @@ class ParameterResolver {
   ParameterResolver(this.bay, 
                     [List<ParameterResolutionStrategy> resolutionStrategies = 
                     const []]) {
-    this.resolutionStrategies.add(new InjectorResolutionStrategy());
-    this.resolutionStrategies.add(new PathParamResolutionStrategy());
-    this.resolutionStrategies.add(new QueryParamResolutionStrategy());
-    this.resolutionStrategies.add(new HeaderParamResolutionStrategy());
-    this.resolutionStrategies.add(new CookieParamResolutionStrategy());
+    this.resolutionStrategies.addAll([
+                                      new HttpResolutionStrategy(),
+                                      new InjectorResolutionStrategy(),
+                                      new PathParamResolutionStrategy(),
+                                      new QueryParamResolutionStrategy(),
+                                      new HeaderParamResolutionStrategy(),
+                                      new FormParamResolutionStrategy(),
+                                      new CookieParamResolutionStrategy(),
+                                      new ContentBodyResolutionStrategy()
+                                      ]);
     this.resolutionStrategies.addAll(resolutionStrategies);
     
     this.resolutionStrategies.forEach((strategy) => strategy.install(bay));
   }
   
   ParameterResolution resolveParameters(ResourceMethod resourceMethod, 
-                                          HttpRequest httpRequest) {
+                                          HttpRequestBody httpRequestBody) {
     var positionalArguments = resourceMethod.methodMirror.parameters
       .where((parameter) => !parameter.isNamed)
       .map((parameter) => 
-          _resolveParameter(resourceMethod, parameter, httpRequest))
+          _resolveParameter(resourceMethod, parameter, httpRequestBody))
       .where((argument) => argument != null)
       .toList(growable: false);
     
@@ -38,7 +89,7 @@ class ParameterResolver {
       .where((parameter) => parameter.isNamed)
       .forEach((parameter) {
         var argument = 
-            _resolveParameter(resourceMethod, parameter, httpRequest);
+            _resolveParameter(resourceMethod, parameter, httpRequestBody);
         
         if (argument != null) {
           namedArguments[parameter.simpleName] = argument;
@@ -48,9 +99,10 @@ class ParameterResolver {
     return new ParameterResolution(positionalArguments, namedArguments);
   }
   
+  // TODO(diego): Transform this on a chain
   Object _resolveParameter(ResourceMethod resourceMethod, 
                              ParameterMirror parameterMirror, 
-                             HttpRequest httpRequest) {
+                             HttpRequestBody httpRequestBody) {
     var resolution;
     
     resolutionStrategies.forEach(
@@ -58,7 +110,7 @@ class ParameterResolver {
         if (resolution == null) {
           resolution = strategy.resolveParameter(resourceMethod, 
                                                  parameterMirror, 
-                                                 httpRequest);
+                                                 httpRequestBody);
         }
     });
     
@@ -84,7 +136,7 @@ abstract class ParameterResolutionStrategy {
   
   Object resolveParameter(ResourceMethod resourceMethod,
                             ParameterMirror parameterMirror, 
-                            HttpRequest httpRequest);
+                            HttpRequestBody httpRequestBody);
   
   void install(Bay bay) {
     this.bay = bay;
@@ -96,7 +148,7 @@ class InjectorResolutionStrategy extends ParameterResolutionStrategy {
   
   Object resolveParameter(ResourceMethod resourceMethod,
                             ParameterMirror parameterMirror, 
-                            HttpRequest httpRequest) {
+                            HttpRequestBody httpRequestBody) {
     var injectMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee == inject, 
       orElse: () => null);
@@ -112,13 +164,13 @@ class InjectorResolutionStrategy extends ParameterResolutionStrategy {
   
 }
 
-abstract class ParamResolutionStrategy extends ParameterResolutionStrategy {
+abstract class AnnotatedParamResolutionStrategy extends ParameterResolutionStrategy {
   
   Object resolveParameter(ResourceMethod resourceMethod,
                             ParameterMirror parameterMirror, 
-                            HttpRequest httpRequest) {
+                            HttpRequestBody httpRequestBody) {
 
-    var param = _extractParam(resourceMethod, parameterMirror, httpRequest);
+    var param = _extractParam(resourceMethod, parameterMirror, httpRequestBody);
     
     if (param == null) {
       var defaultValueMetadata = parameterMirror.metadata.firstWhere(
@@ -161,15 +213,15 @@ abstract class ParamResolutionStrategy extends ParameterResolutionStrategy {
   
   String _extractParam(ResourceMethod resourceMethod,
                          ParameterMirror parameterMirror, 
-                         HttpRequest httpRequest);
+                         HttpRequestBody httpRequestBody);
   
 }
 
-class PathParamResolutionStrategy extends ParamResolutionStrategy {
+class PathParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
   
   String _extractParam(ResourceMethod resourceMethod,
                          ParameterMirror parameterMirror, 
-                         HttpRequest httpRequest) {
+                         HttpRequestBody httpRequestBody) {
     var pathParamMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee is PathParam, 
       orElse: () => null);
@@ -178,17 +230,17 @@ class PathParamResolutionStrategy extends ParamResolutionStrategy {
       return null;
     
     var paramName = pathParamMetadata.reflectee.param;
-    var match = resourceMethod.pathPattern.match(httpRequest.uri);
+    var match = resourceMethod.pathPattern.match(httpRequestBody.request.uri);
     return match.parameters[paramName];
   }
   
 }
 
-class QueryParamResolutionStrategy extends ParamResolutionStrategy {
+class QueryParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
   
   String _extractParam(ResourceMethod resourceMethod,
                          ParameterMirror parameterMirror, 
-                         HttpRequest httpRequest) {
+                         HttpRequestBody httpRequestBody) {
     var paramMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee is QueryParam, 
       orElse: () => null);
@@ -197,15 +249,15 @@ class QueryParamResolutionStrategy extends ParamResolutionStrategy {
       return null;
     
     var paramName = paramMetadata.reflectee.param;
-    return httpRequest.uri.queryParameters[paramName];
+    return httpRequestBody.request.uri.queryParameters[paramName];
   }
 }
 
-class HeaderParamResolutionStrategy extends ParamResolutionStrategy {
+class HeaderParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
   
   String _extractParam(ResourceMethod resourceMethod,
                          ParameterMirror parameterMirror, 
-                         HttpRequest httpRequest) {
+                         HttpRequestBody httpRequestBody) {
     var paramMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee is HeaderParam, 
       orElse: () => null);
@@ -214,15 +266,15 @@ class HeaderParamResolutionStrategy extends ParamResolutionStrategy {
       return null;
     
     var paramName = paramMetadata.reflectee.param;
-    return httpRequest.headers.value(paramName);
+    return httpRequestBody.request.headers.value(paramName);
   }
 }
 
-class CookieParamResolutionStrategy extends ParamResolutionStrategy {
+class CookieParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
   
   String _extractParam(ResourceMethod resourceMethod,
                          ParameterMirror parameterMirror, 
-                         HttpRequest httpRequest) {
+                         HttpRequestBody httpRequestBody) {
     var paramMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee is CookieParam, 
       orElse: () => null);
@@ -231,7 +283,7 @@ class CookieParamResolutionStrategy extends ParamResolutionStrategy {
       return null;
     
     var paramName = paramMetadata.reflectee.param;
-    var cookie = httpRequest.cookies.firstWhere(
+    var cookie = httpRequestBody.request.cookies.firstWhere(
         (cookie) => cookie.name == paramName, 
         orElse: () => null);
     
@@ -243,6 +295,65 @@ class CookieParamResolutionStrategy extends ParamResolutionStrategy {
   }
 }
 
+class FormParamResolutionStrategy extends ParameterResolutionStrategy {
+  
+  Object resolveParameter(ResourceMethod resourceMethod,
+                          ParameterMirror parameterMirror, 
+                          HttpRequestBody httpRequestBody) {
+    var paramMetadata = parameterMirror.metadata.firstWhere(
+      (metadata) => metadata.reflectee is FormParam, 
+      orElse: () => null);
+    
+    if (paramMetadata == null || httpRequestBody.type != "form")
+      return null;
+    
+    var paramName = paramMetadata.reflectee.param;
+    return httpRequestBody.body[paramName];
+  }
+}
+
+class HttpResolutionStrategy extends ParameterResolutionStrategy {
+  Object resolveParameter(ResourceMethod resourceMethod,
+                            ParameterMirror parameterMirror, 
+                            HttpRequestBody httpRequestBody) {
+    var parameterType = typeOfTypeMirror(parameterMirror.type);
+    
+    if (parameterType == HttpRequest) {
+      return httpRequestBody.request;
+    } else if (parameterType == HttpResponse) {
+      return httpRequestBody.request.response;
+    } else if (parameterType == HttpRequestBody) {
+      return httpRequestBody;
+    }
+    
+    return null;
+  }
+}
+
+class ContentBodyResolutionStrategy extends ParameterResolutionStrategy {
+  Object resolveParameter(ResourceMethod resourceMethod,
+                            ParameterMirror parameterMirror, 
+                            HttpRequestBody httpRequestBody) {
+    var parameterType = typeOfTypeMirror(parameterMirror.type);
+    
+    if (httpRequestBody.type == "text" && 
+        typeOfTypeMirror(parameterMirror.type) == String) {
+      return httpRequestBody.body;
+    } else if (httpRequestBody.type == "json") {
+      if (parameterMirror.type.simpleName == #Map) {
+        return httpRequestBody.body;
+      }
+      
+      return new ModelMap().fromMap(parameterType, httpRequestBody.body);
+    } else if (httpRequestBody.type == "form" && 
+                parameterMirror.type.simpleName == #Map) {
+      return httpRequestBody.body;
+    }
+    
+    return null;
+  }
+}
+
 class UnresolvedParameterError extends Error {
   final ParameterMirror parameter;
   
@@ -250,8 +361,9 @@ class UnresolvedParameterError extends Error {
   
   String toString() {
     return "No parameter resolution strategy was able to resolve parameter "
-            "${parameter.simpleName} of "
-            "${parameter.owner.owner.simpleName}.${parameter.owner.simpleName}";
+            "'${MirrorSystem.getName(parameter.simpleName)}' of "
+            "'${MirrorSystem.getName(parameter.owner.owner.simpleName)}."
+            "${MirrorSystem.getName(parameter.owner.simpleName)}'";
   }
 }
 
