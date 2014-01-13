@@ -69,8 +69,8 @@ class Bay {
       HttpServer.bind(address, port).then(
           (httpServer) {
             completer.complete(new Bay._(injector, httpServer));
-          }, onError: (error) {
-            completer.completeError(error);
+          }, onError: (error, stackTrace) {
+            completer.completeError(error, stackTrace);
           });
     }
     

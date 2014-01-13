@@ -41,8 +41,8 @@ class Router {
       if (resourceMethod == null) {
         throw new ResourceNotFoundException(httpRequestBody.request.uri.path);
       }
-    } catch (e) {
-      completer.completeError(e);
+    } catch (error, stackTrace) {
+      completer.completeError(error, stackTrace);
       return completer.future;
     }
     
@@ -51,8 +51,10 @@ class Router {
         _callResourceMethod(resourceMethod, httpRequest).then(
           (httpRequest) {
             completer.complete(httpRequest);
-        }, onError: (error) => completer.completeError(error));
-      }, onError: (error) => completer.completeError(error));
+        }, onError: (error, stackTrace) => 
+                                  completer.completeError(error, stackTrace));
+      }, onError: (error, stackTrace) => 
+                                  completer.completeError(error, stackTrace));
     
     return completer.future;
   }
@@ -67,8 +69,8 @@ class Router {
           
           try {
             resourceFilter = bay.injector.getInstanceOfKey(key);
-          } catch (e) {
-            completer.completeError(e);
+          } catch (error, stackTrace) {
+            completer.completeError(error, stackTrace);
           }
           
           if (resourceFilter is ResourceFilter) {
@@ -83,7 +85,8 @@ class Router {
     
     _iterateThroughFilters(matchingFilters.iterator, httpRequestBody).then(
         (httpRequest) => completer.complete(httpRequest),
-        onError: (error) => completer.completeError(error)
+        onError: (error, stackTrace) => 
+            completer.completeError(error, stackTrace)
         );
     
     return completer.future;
@@ -105,9 +108,10 @@ class Router {
               _iterateThroughFilters(resourceFilterIterator, 
                                    httpRequestBody, 
                                    completer);
-        }, onError: (error) => completer.completeError(error));
-      } catch (error) {
-        completer.completeError(error);
+        }, onError: (error, stackTrace) => 
+            completer.completeError(error, stackTrace));
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
       }
     } else {
       completer.complete(httpRequestBody);
