@@ -31,7 +31,7 @@ class Bay {
               _logger.finer("Responded HttpRequest from "
                   "${httpRequest.request.connectionInfo.remoteAddress}");
             },
-            onError: (error) {
+            onError: (error, stackTrace) {
               if (error is ResourceNotFoundException) {
                 _logger.finer("Resource not found: ${error.path}", error);
                 if (httpBody.request.response.contentLength == 0) {
@@ -40,7 +40,8 @@ class Bay {
                 httpBody.request.response.write("Not found");
                 httpBody.request.response.close();
               } else {
-                _logger.severe("Unknown error: $error", error);
+                _logger.severe("Unknown error: $error\n$stackTrace", 
+                    error, stackTrace);
                 if (httpBody.request.response.contentLength == 0) {
                   httpBody.request.response.statusCode = 500;
                 }

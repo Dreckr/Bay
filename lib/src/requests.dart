@@ -135,8 +135,8 @@ abstract class ParameterResolutionStrategy {
   Bay bay;
   
   Object resolveParameter(ResourceMethod resourceMethod,
-                            ParameterMirror parameterMirror, 
-                            HttpRequestBody httpRequestBody);
+                          ParameterMirror parameterMirror, 
+                          HttpRequestBody httpRequestBody);
   
   void install(Bay bay) {
     this.bay = bay;
@@ -147,8 +147,8 @@ abstract class ParameterResolutionStrategy {
 class InjectorResolutionStrategy extends ParameterResolutionStrategy {
   
   Object resolveParameter(ResourceMethod resourceMethod,
-                            ParameterMirror parameterMirror, 
-                            HttpRequestBody httpRequestBody) {
+                          ParameterMirror parameterMirror, 
+                          HttpRequestBody httpRequestBody) {
     var injectMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee == inject, 
       orElse: () => null);
@@ -167,8 +167,8 @@ class InjectorResolutionStrategy extends ParameterResolutionStrategy {
 abstract class AnnotatedParamResolutionStrategy extends ParameterResolutionStrategy {
   
   Object resolveParameter(ResourceMethod resourceMethod,
-                            ParameterMirror parameterMirror, 
-                            HttpRequestBody httpRequestBody) {
+                          ParameterMirror parameterMirror, 
+                          HttpRequestBody httpRequestBody) {
 
     var param = _extractParam(resourceMethod, parameterMirror, httpRequestBody);
     
@@ -212,16 +212,16 @@ abstract class AnnotatedParamResolutionStrategy extends ParameterResolutionStrat
   }
   
   String _extractParam(ResourceMethod resourceMethod,
-                         ParameterMirror parameterMirror, 
-                         HttpRequestBody httpRequestBody);
+                       ParameterMirror parameterMirror, 
+                       HttpRequestBody httpRequestBody);
   
 }
 
 class PathParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
   
   String _extractParam(ResourceMethod resourceMethod,
-                         ParameterMirror parameterMirror, 
-                         HttpRequestBody httpRequestBody) {
+                       ParameterMirror parameterMirror, 
+                       HttpRequestBody httpRequestBody) {
     var pathParamMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee is PathParam, 
       orElse: () => null);
@@ -239,8 +239,8 @@ class PathParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
 class QueryParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
   
   String _extractParam(ResourceMethod resourceMethod,
-                         ParameterMirror parameterMirror, 
-                         HttpRequestBody httpRequestBody) {
+                       ParameterMirror parameterMirror, 
+                       HttpRequestBody httpRequestBody) {
     var paramMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee is QueryParam, 
       orElse: () => null);
@@ -256,8 +256,8 @@ class QueryParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
 class HeaderParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
   
   String _extractParam(ResourceMethod resourceMethod,
-                         ParameterMirror parameterMirror, 
-                         HttpRequestBody httpRequestBody) {
+                       ParameterMirror parameterMirror, 
+                       HttpRequestBody httpRequestBody) {
     var paramMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee is HeaderParam, 
       orElse: () => null);
@@ -273,8 +273,8 @@ class HeaderParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
 class CookieParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
   
   String _extractParam(ResourceMethod resourceMethod,
-                         ParameterMirror parameterMirror, 
-                         HttpRequestBody httpRequestBody) {
+                       ParameterMirror parameterMirror, 
+                       HttpRequestBody httpRequestBody) {
     var paramMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee is CookieParam, 
       orElse: () => null);
@@ -314,8 +314,8 @@ class FormParamResolutionStrategy extends ParameterResolutionStrategy {
 
 class HttpResolutionStrategy extends ParameterResolutionStrategy {
   Object resolveParameter(ResourceMethod resourceMethod,
-                            ParameterMirror parameterMirror, 
-                            HttpRequestBody httpRequestBody) {
+                          ParameterMirror parameterMirror, 
+                          HttpRequestBody httpRequestBody) {
     var parameterType = typeOfTypeMirror(parameterMirror.type);
     
     if (parameterType == HttpRequest) {
@@ -332,8 +332,8 @@ class HttpResolutionStrategy extends ParameterResolutionStrategy {
 
 class ContentBodyResolutionStrategy extends ParameterResolutionStrategy {
   Object resolveParameter(ResourceMethod resourceMethod,
-                            ParameterMirror parameterMirror, 
-                            HttpRequestBody httpRequestBody) {
+                          ParameterMirror parameterMirror, 
+                          HttpRequestBody httpRequestBody) {
     var parameterType = typeOfTypeMirror(parameterMirror.type);
     
     if (httpRequestBody.type == "text" && 
@@ -344,7 +344,7 @@ class ContentBodyResolutionStrategy extends ParameterResolutionStrategy {
         return httpRequestBody.body;
       }
       
-      return new ModelMap().fromMap(parameterType, httpRequestBody.body);
+      return new ModelMap().deserialize(parameterType, httpRequestBody.body);
     } else if (httpRequestBody.type == "form" && 
                 parameterMirror.type.simpleName == #Map) {
       return httpRequestBody.body;
@@ -371,7 +371,6 @@ Type typeOfTypeMirror(TypeMirror typeMirror) {
   if (typeMirror is ClassMirror) {
     return typeMirror.reflectedType;
   } else if (typeMirror is TypedefMirror) {
-    // TODO(diego): Use typeMirror.reflectedType when it becomes available
     return typeMirror.referent.reflectedType;
   } else {
     return null;
