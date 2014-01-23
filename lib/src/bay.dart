@@ -9,6 +9,12 @@ import 'router.dart';
 
 final _coreLogger = new Logger("bay.core");
 
+// TODO(diego): Tests
+// TODO(diego): Viewable
+// TODO(diego): Serve static files
+// TODO(diego): OPTIONS default response
+// TODO(diego): Log everything
+// TODO(diego): Document everything
 class Bay {
   static final _logger = new Logger("bay.core.Bay");
   final HttpServer httpServer;
@@ -26,6 +32,7 @@ class Bay {
       (HttpRequestBody httpBody) {
         _logger.finer("Receiving HttpRequest from "
                        "${httpBody.request.connectionInfo.remoteAddress}");
+        
         router.handleRequest(httpBody).then(
             (httpRequest) {
               _logger.finer("Responded HttpRequest from "
@@ -55,12 +62,11 @@ class Bay {
     }, onError: (error) {}, onDone: () {});
   }
   
-  
   // TODO: Secure HttpServer
   static Future<Bay> init(Injector injector, 
                           {HttpServer httpServer, 
-                           String address: "127.0.0.1", 
-                           int port: 8080}) {
+                           String address: "0.0.0.0", 
+                           int port: 80}) {
     var completer = new Completer<Bay>();
     
     if (httpServer != null) {

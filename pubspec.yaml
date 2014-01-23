@@ -10,8 +10,8 @@ dependencies:
     path: ../dado
   http_server: any
   logging: any
-  model_map:
-    path: ../model_map
+  morph:
+    path: ../Morph
   uri: any
 dev_dependencies:
   unittest: '>=0.5.0'

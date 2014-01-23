@@ -5,11 +5,12 @@ import 'dart:io';
 import 'dart:mirrors';
 import 'package:http_server/http_server.dart';
 import 'package:inject/inject.dart';
-import 'package:model_map/model_map.dart';
+import 'package:morph/morph.dart';
 import 'annotations.dart';
 import 'bay.dart';
 import 'resources.dart';
 
+// TODO(diego): Scan for parameter resolution strategies
 class RequestHandler {
   final Bay bay;
   final ParameterResolver parameterResolver;
@@ -99,26 +100,21 @@ class ParameterResolver {
     return new ParameterResolution(positionalArguments, namedArguments);
   }
   
-  // TODO(diego): Transform this on a chain
   Object _resolveParameter(ResourceMethod resourceMethod, 
                              ParameterMirror parameterMirror, 
                              HttpRequestBody httpRequestBody) {
-    var resolution;
+    var resolutionStrategy = resolutionStrategies.firstWhere(
+        (strategy) => 
+            strategy.appliesTo(resourceMethod, parameterMirror, httpRequestBody)
+        , orElse: () => null);
     
-    resolutionStrategies.forEach(
-      (strategy) {
-        if (resolution == null) {
-          resolution = strategy.resolveParameter(resourceMethod, 
-                                                 parameterMirror, 
-                                                 httpRequestBody);
-        }
-    });
-    
-    if (resolution == null && !parameterMirror.isOptional) {
+    if (resolutionStrategy == null && !parameterMirror.isOptional) {
       throw new UnresolvedParameterError(parameterMirror);
     }
     
-    return resolution;
+    return resolutionStrategy.resolveParameter(resourceMethod,
+                                                parameterMirror,
+                                                httpRequestBody);
     
   }
 }
@@ -134,6 +130,10 @@ class ParameterResolution {
 abstract class ParameterResolutionStrategy {
   Bay bay;
   
+  bool appliesTo(ResourceMethod resourceMethod,
+                 ParameterMirror parameterMirror, 
+                 HttpRequestBody httpRequestBody);
+  
   Object resolveParameter(ResourceMethod resourceMethod,
                           ParameterMirror parameterMirror, 
                           HttpRequestBody httpRequestBody);
@@ -146,9 +146,18 @@ abstract class ParameterResolutionStrategy {
 
 class InjectorResolutionStrategy extends ParameterResolutionStrategy {
   
+  bool appliesTo(ResourceMethod resourceMethod,
+                 ParameterMirror parameterMirror, 
+                 HttpRequestBody httpRequestBody) {
+    return parameterMirror.metadata.firstWhere(
+        (metadata) => metadata.reflectee == inject, 
+        orElse: () => null) != null;
+  }
+  
   Object resolveParameter(ResourceMethod resourceMethod,
                           ParameterMirror parameterMirror, 
                           HttpRequestBody httpRequestBody) {
+    
     var injectMetadata = parameterMirror.metadata.firstWhere(
       (metadata) => metadata.reflectee == inject, 
       orElse: () => null);
@@ -165,6 +174,13 @@ class InjectorResolutionStrategy extends ParameterResolutionStrategy {
 }
 
 abstract class AnnotatedParamResolutionStrategy extends ParameterResolutionStrategy {
+  
+  bool appliesTo(ResourceMethod resourceMethod,
+                 ParameterMirror parameterMirror, 
+                 HttpRequestBody httpRequestBody) {
+    return 
+      _extractParam(resourceMethod, parameterMirror, httpRequestBody) != null;
+  }
   
   Object resolveParameter(ResourceMethod resourceMethod,
                           ParameterMirror parameterMirror, 
@@ -297,6 +313,14 @@ class CookieParamResolutionStrategy extends AnnotatedParamResolutionStrategy {
 
 class FormParamResolutionStrategy extends ParameterResolutionStrategy {
   
+  bool appliesTo(ResourceMethod resourceMethod,
+                 ParameterMirror parameterMirror, 
+                 HttpRequestBody httpRequestBody) {
+    return parameterMirror.metadata.firstWhere(
+        (metadata) => metadata.reflectee is FormParam, 
+        orElse: () => null) != null;
+  }
+  
   Object resolveParameter(ResourceMethod resourceMethod,
                           ParameterMirror parameterMirror, 
                           HttpRequestBody httpRequestBody) {
@@ -313,6 +337,16 @@ class FormParamResolutionStrategy extends ParameterResolutionStrategy {
 }
 
 class HttpResolutionStrategy extends ParameterResolutionStrategy {
+  
+  bool appliesTo(ResourceMethod resourceMethod,
+                 ParameterMirror parameterMirror, 
+                 HttpRequestBody httpRequestBody) {
+    var parameterType = typeOfTypeMirror(parameterMirror.type);
+    
+    return parameterType == HttpRequest || 
+            parameterType == HttpResponse ||
+            parameterType == HttpRequestBody;
+  }
   Object resolveParameter(ResourceMethod resourceMethod,
                           ParameterMirror parameterMirror, 
                           HttpRequestBody httpRequestBody) {
@@ -330,21 +364,34 @@ class HttpResolutionStrategy extends ParameterResolutionStrategy {
   }
 }
 
+// TODO(diego): Convert into format agnostic strategy
 class ContentBodyResolutionStrategy extends ParameterResolutionStrategy {
+  
+  bool appliesTo(ResourceMethod resourceMethod,
+                 ParameterMirror parameterMirror, 
+                 HttpRequestBody httpRequestBody) {
+    var parameterType = typeOfTypeMirror(parameterMirror.type);
+    
+    return (httpRequestBody.type == "text" && parameterType == String) ||
+            (httpRequestBody.type == "json") ||
+            (httpRequestBody.type == "form" && 
+            parameterMirror.type.simpleName == #Map);
+  }
+  
   Object resolveParameter(ResourceMethod resourceMethod,
                           ParameterMirror parameterMirror, 
                           HttpRequestBody httpRequestBody) {
     var parameterType = typeOfTypeMirror(parameterMirror.type);
     
-    if (httpRequestBody.type == "text" && 
-        typeOfTypeMirror(parameterMirror.type) == String) {
+    if (httpRequestBody.type == "text" && parameterType == String) {
       return httpRequestBody.body;
     } else if (httpRequestBody.type == "json") {
+      
       if (parameterMirror.type.simpleName == #Map) {
         return httpRequestBody.body;
       }
       
-      return new ModelMap().deserialize(parameterType, httpRequestBody.body);
+      return new Morph().deserialize(parameterType, httpRequestBody.body);
     } else if (httpRequestBody.type == "form" && 
                 parameterMirror.type.simpleName == #Map) {
       return httpRequestBody.body;

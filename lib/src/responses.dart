@@ -5,17 +5,18 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:mirrors';
 import 'package:http_server/http_server.dart';
-import 'package:model_map/model_map.dart';
+import 'package:morph/morph.dart';
 import 'bay.dart';
 import 'resources.dart';
 
+// TODO(diego): Scan for response processors
 class ResponseHandler {
   final Bay bay;
   List<ResponseProcessor> processors = [];
   
   ResponseHandler(this.bay) {
     processors.add(new HttpResponseProcessor());
-    processors.add(new ModelMapJsonResponseProcessor());
+    processors.add(new MorphJsonResponseProcessor());
   }
   
   Future handleResponse(ResourceMethod resourceMethod, 
@@ -32,7 +33,7 @@ class ResponseHandler {
     }
     
     var processor = processors.firstWhere((processor) => 
-        processor.accepts(resourceMethod, httpRequestBody, response),
+        processor.appliesTo(resourceMethod, httpRequestBody, response),
         orElse: () => null);
     
     if (processor == null) {
@@ -60,7 +61,7 @@ class ResponseHandler {
 
 abstract class ResponseProcessor {
   
-  bool accepts(ResourceMethod resourceMethod, 
+  bool appliesTo(ResourceMethod resourceMethod, 
               HttpRequestBody httpRequestBody,
               response);
   
@@ -80,7 +81,7 @@ class ResponseContent {
 
 class HttpResponseProcessor implements ResponseProcessor {
   
-  bool accepts(ResourceMethod resourceMethod, 
+  bool appliesTo(ResourceMethod resourceMethod, 
                HttpRequestBody httpRequestBody,
                response) {
     return response is HttpRequest || response is HttpResponse || 
@@ -94,10 +95,11 @@ class HttpResponseProcessor implements ResponseProcessor {
   }
 }
 
-class ModelMapJsonResponseProcessor implements ResponseProcessor {
-  final ModelMap modelMap = new ModelMap();
+// TODO(diego): Convert into format agnostic processor
+class MorphJsonResponseProcessor implements ResponseProcessor {
+  final Morph morph = new Morph();
   
-  bool accepts(ResourceMethod resourceMethod, 
+  bool appliesTo(ResourceMethod resourceMethod, 
               HttpRequestBody httpRequestBody,
               response) {
     var accepts = httpRequestBody.request.headers.value(HttpHeaders.ACCEPT);
@@ -112,7 +114,7 @@ class ModelMapJsonResponseProcessor implements ResponseProcessor {
     var completer = new Completer<ResponseContent>();
     
     try {
-      var content = modelMap.serialize(response, JSON.encoder);
+      var content = morph.serialize(response, JSON.encoder);
       var contentType = "application/json";
       completer.complete(new ResponseContent(content, contentType));
     } catch (error, stackTrace) {
