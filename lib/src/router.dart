@@ -2,182 +2,46 @@ library bay.router;
 
 import 'dart:async';
 import 'dart:io';
-import 'package:dado/dado.dart';
-import 'package:uri/uri.dart';
-import 'package:http_server/http_server.dart';
-import 'bay.dart';
-import 'filters.dart';
-import 'responses.dart';
-import 'requests.dart';
-import 'resources.dart';
+import 'injector.dart';
+import 'handler.dart';
 
 class Router {
-  final Bay bay;
-  List<Resource> resources;
-  Map<UriPattern, Key> filters;
-  final ResourceScanner resourceScanner;
-  final FilterScanner filterScanner;
-  final RequestHandler requestHandler;
-  final ResponseHandler responseHandler;
+  final InjectorScanner injectorScanner;
+  List<RequestHandler> requestHandlers;
   
-  Router(Bay bay) : 
-      bay = bay,
-      resourceScanner = new ResourceScanner(bay),
-      filterScanner = new FilterScanner(bay),
-      requestHandler = new RequestHandler(bay),
-      responseHandler = new ResponseHandler(bay) {
-
-    resources = resourceScanner.scanResources();
-    filters = filterScanner.scanFilters();
+  Router(InjectorScanner this.injectorScanner) {
+    var bindings = injectorScanner.findBindingsBy(superType: RequestHandler);
+    
+    requestHandlers = bindings.map(
+        (binding) => binding.getInstance()).toList(growable: false);
+    
+    requestHandlers.sort((a, b) => -a.priority.compareTo(b.priority));
   }
   
-  Future<HttpRequestBody> handleRequest(HttpRequestBody httpRequestBody) {
-    var completer = new Completer<HttpRequestBody>();
-    
-    var resourceMethod;
+  Future<HttpRequest> handleRequest(HttpRequest httpRequest) {
+    var future;
     try {
-      resourceMethod = _findResourceMethod(httpRequestBody);
-
-      if (resourceMethod == null) {
-        throw new ResourceNotFoundException(httpRequestBody.request.uri.path);
-      }
+      var requestHandler = findRequestHandler(httpRequest);
+      
+      future = requestHandler.handle(httpRequest);
     } catch (error, stackTrace) {
-      completer.completeError(error, stackTrace);
-      return completer.future;
+      future = new Future.error(error, stackTrace);
     }
     
-    _applyFilters(httpRequestBody).then(
-      (httpRequest) {
-        _callResourceMethod(resourceMethod, httpRequest).then(
-          (httpRequest) {
-            completer.complete(httpRequest);
-        }, onError: (error, stackTrace) => 
-                                  completer.completeError(error, stackTrace));
-      }, onError: (error, stackTrace) => 
-                                  completer.completeError(error, stackTrace));
-    
-    return completer.future;
+    return future;
   }
   
-  Future<HttpRequestBody> _applyFilters(HttpRequestBody httpRequestBody) {
-    var completer = new Completer<HttpRequestBody>();
-    var matchingFilters = new List<ResourceFilter>();
-    filters.forEach(
-      (pattern, key) {
-        if (pattern.matches(httpRequestBody.request.uri)) {
-          var resourceFilter;
-          
-          try {
-            resourceFilter = bay.injector.getInstanceOfKey(key);
-          } catch (error, stackTrace) {
-            completer.completeError(error, stackTrace);
-          }
-          
-          if (resourceFilter is ResourceFilter) {
-            matchingFilters.add(resourceFilter);
-          }
-        }
-    });
+  RequestHandler findRequestHandler(HttpRequest httpRequest) {
+    var matchingHandler = requestHandlers.firstWhere(
+        (handler) => handler.accepts(httpRequest),
+        orElse: () => null);
     
-    if (completer.isCompleted) {
-      return completer.future;
+    if (matchingHandler == null) {
+      throw new ResourceNotFoundException(httpRequest.uri.path);
     }
     
-    _iterateThroughFilters(matchingFilters.iterator, httpRequestBody).then(
-        (httpRequest) => completer.complete(httpRequest),
-        onError: (error, stackTrace) => 
-            completer.completeError(error, stackTrace)
-        );
-    
-    return completer.future;
+    return matchingHandler;
   }
-  
-  // TODO(diego): Should be replaced with a chain of responsability?
-  Future<HttpRequestBody> _iterateThroughFilters(
-                       Iterator<ResourceFilter> resourceFilterIterator, 
-                       HttpRequestBody httpRequestBody,
-                       [Completer completer]) {
-    if (completer == null) {
-      completer = new Completer<HttpRequestBody>();
-    }
-    
-    if (resourceFilterIterator.moveNext()) {
-      try {
-        resourceFilterIterator.current.filter(httpRequestBody).then(
-          (httpRequestBody) {
-              _iterateThroughFilters(resourceFilterIterator, 
-                                   httpRequestBody, 
-                                   completer);
-        }, onError: (error, stackTrace) => 
-            completer.completeError(error, stackTrace));
-      } catch (error, stackTrace) {
-        completer.completeError(error, stackTrace);
-      }
-    } else {
-      completer.complete(httpRequestBody);
-    }
-    
-    return completer.future;
-  }
-  
-  ResourceMethod _findResourceMethod(HttpRequestBody httpRequestBody) {
-    Resource matchingResource;
-    ResourceMethod matchingMethod;
-    HttpRequest request = httpRequestBody.request;
-    
-    resources.forEach(
-        (resource) {
-          if (resource.pathPattern.matches(request.uri)) {
-            if (matchingResource == null) {
-              matchingResource = resource;
-            } else {
-              throw new MultipleMatchingResourcesError(request.uri.path);
-            }
-          }
-          
-          if (matchingResource != null) {
-            matchingResource.methods.forEach(
-              (method) {
-                var match = method.pathPattern.match(request.uri);
-                if (match != null && 
-                    match.rest.path.length == 0 &&
-                    method.method == request.method) {
-                  if (matchingMethod == null) {
-                    matchingMethod = method;
-                  } else {
-                    throw 
-                      new MultipleMatchingResourcesError(request.uri.path);
-                  }
-                }
-              });
-          }
-    });
-    
-    return matchingMethod;
-  }
-  
-  Future<HttpRequestBody> _callResourceMethod(ResourceMethod resourceMethod, 
-      HttpRequestBody httpRequestBody) {
-    var completer = new Completer<HttpRequestBody>();
-    requestHandler
-      .handleRequest(resourceMethod, httpRequestBody)
-      .then(
-        (response) =>
-          responseHandler
-            .handleResponse(resourceMethod, httpRequestBody, response)
-        ,onError: (error, stackTrace) => 
-            completer.completeError(error, stackTrace))
-      .then((_) { 
-        if (!completer.isCompleted)
-          completer.complete(httpRequestBody);
-      },
-            onError: (error, stackTrace) => 
-              completer.completeError(error, stackTrace));
-              
-    
-    return completer.future;
-  }
-  
 }
 
 class ResourceNotFoundException implements Exception {
@@ -188,12 +52,12 @@ class ResourceNotFoundException implements Exception {
   String toString() => "Resource not found for: $path";
   
 }
-
-class MultipleMatchingResourcesError extends Error {
-  final String path;
-  
-  MultipleMatchingResourcesError(String this.path);
-  
-  String toString() => "Multiple resources matching: $path";
-  
-}
+//
+//class MultipleMatchingResourcesError extends Error {
+//  final String path;
+//  
+//  MultipleMatchingResourcesError(String this.path);
+//  
+//  String toString() => "Multiple resources matching: $path";
+//  
+//}

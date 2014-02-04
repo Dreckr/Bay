@@ -1,17 +1,13 @@
 name: bay
-version: 0.0.1
 author: Diego Rocha <diego.rocha.comp@gmail.com>
-description: An easy HTTP service builder with dependency injection supported by Dado. Definitely an awesome way to structure your backend.
+version: 0.0.1
 homepage: https://github.com/Dreckr/Bay
+description: .A pluggable framework for server-side development.
 environment:
   sdk: '>=1.0.0'
 dependencies:
   dado:
     path: ../dado
-  http_server: any
   logging: any
-  morph:
-    path: ../Morph
-  uri: any
 dev_dependencies:
-  unittest: '>=0.5.0'
+  unittest: '>=0.9.3'
