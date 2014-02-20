@@ -91,7 +91,7 @@ class _BayImpl implements Bay {
   final HttpServer httpServer;
   final Injector injector;
   final Router router;
-  final InjectorScanner injectorScanner;
+  final InjectorBindings injectorBindings;
   List<BayPlugin> _plugins;
   
   String get address => httpServer.address.address;
@@ -100,7 +100,7 @@ class _BayImpl implements Bay {
   
   Set<HttpResponse> _pendingResponses = new Set();
   
-  _BayImpl(this.injector, this.httpServer, this.router, this.injectorScanner);
+  _BayImpl(this.injector, this.httpServer, this.router, this.injectorBindings);
   
   start() {
     _logger.config("Bay started");
@@ -118,8 +118,10 @@ class _BayImpl implements Bay {
   }
   
   _handleRequest(HttpRequest request) {
-    _logger.finer("Receiving HttpRequest from "
-        "${request.connectionInfo.remoteAddress}");
+    if (request.connectionInfo != null) {
+      _logger.finer("Receiving HttpRequest from "
+          "${request.connectionInfo.remoteAddress}");
+    }
     
     _pendingResponses.add(request.response);
     request.response.done.whenComplete(() {
@@ -128,9 +130,11 @@ class _BayImpl implements Bay {
     
     router.handleRequest(request)
       ..then(
-          (httpRequest) {
-            _logger.finer("Responded HttpRequest from "
-                "${httpRequest.connectionInfo.remoteAddress}");
+          (request) {
+            if (request.connectionInfo != null) {
+              _logger.finer("Responded HttpRequest from "
+                  "${request.connectionInfo.remoteAddress}");
+            }
           },
           onError: (error, stackTrace) {
             _logger.severe("Unknown error: $error\n$stackTrace", 
@@ -151,7 +155,7 @@ class _BayImpl implements Bay {
   }
   
   _initiatePlugins() {
-    var pluginBindings = injectorScanner.findBindingsBy(superType: BayPlugin);
+    var pluginBindings = injectorBindings.withSuperType(BayPlugin);
     _plugins = [];
     
     pluginBindings.forEach((pluginBinding) {
@@ -187,7 +191,7 @@ class _BayModule extends DeclarativeModule {
   
   NotFoundRequestHandler notFoundHandler;
   
-  InjectorScanner injectorScanner;
+  InjectorBindings injectorBindings;
   
   _BayModule(this.httpServer);
   

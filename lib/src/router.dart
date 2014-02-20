@@ -6,11 +6,11 @@ import 'injector.dart';
 import 'handler.dart';
 
 class Router {
-  final InjectorScanner injectorScanner;
+  final InjectorBindings injectorBindings;
   List<RequestHandler> requestHandlers;
   
-  Router(InjectorScanner this.injectorScanner) {
-    var bindings = injectorScanner.findBindingsBy(superType: RequestHandler);
+  Router(InjectorBindings this.injectorBindings) {
+    var bindings = injectorBindings.withSuperType(RequestHandler);
     
     requestHandlers = bindings.map(
         (binding) => binding.getInstance()).toList(growable: false);

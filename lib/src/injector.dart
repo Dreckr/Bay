@@ -1,65 +1,59 @@
 library bay.injector;
 
+import 'dart:collection';
 import 'dart:mirrors';
 import 'package:dado/dado.dart';
+import 'package:inject/inject.dart';
 import 'package:quiver/mirrors.dart';
 export 'package:dado/dado.dart' show Injector, Key;
 
-class InjectorScanner {
-  final Injector injector;
+class InjectorBindings extends IterableMixin<BayBinding> {
+  Iterable<BayBinding> _bindings;
   
-  InjectorScanner(this.injector);
+  Iterator<BayBinding> get iterator => _bindings.iterator;
   
-  List<BayBinding> getAllBindings() {
-    return injector.bindings.map(
+  @inject
+  factory InjectorBindings(Injector injector) {
+    var bindings = injector.bindings.map(
         (binding) => new BayBinding._(binding, injector))
           .toList(growable: false);
+    
+    return new InjectorBindings._(bindings);
   }
   
-  List<BayBinding> findBindingsBy({Type type, 
-                                Type superType,
-                                annotation, 
-                                Type annotationType, 
-                                typeAnnotatedWith,
-                                Type typeAnnotatedWithType}) {
-    var matchingBindings = getAllBindings();
-    
-    if (type != null) {
-      matchingBindings = matchingBindings.where(
-          (binding) => binding.key.type == type);
-    }
-    
-    if (superType != null) {
-      matchingBindings = matchingBindings.where(
-          (binding) => classImplements(reflectClass(binding.key.type), 
-                                       reflectClass(superType).qualifiedName));
-    }
-    
-    if (annotation != null) {
-      matchingBindings = matchingBindings.where(
-          (binding) => binding.key.annotation == annotation);
-    }
-    
-    if (annotationType != null) {
-      matchingBindings = matchingBindings.where(
+  InjectorBindings._(this._bindings);
+  
+  InjectorBindings withType(Type type) =>
+    this.where(
+        (binding) => binding.key.type == type);
+  
+  InjectorBindings withSuperType(Type superType) =>
+    this.where(
+        (binding) => classImplements(reflectClass(binding.key.type), 
+            reflectClass(superType).qualifiedName));
+
+  InjectorBindings annotatedWith(annotation) =>
+      this.where((binding) => binding.key.annotation == annotation);
+  
+  InjectorBindings annotatedWithType(Type annotationType) =>
+      this.where(
           (binding) => binding.key.annotation.runtimeType == annotationType);
-    }
-    
-    if (typeAnnotatedWith != null) {
-      matchingBindings = matchingBindings.where(
+  
+  InjectorBindings classAnnotatedWith(annotation) =>
+      this.where(
           (binding) => reflectClass(binding.key.type).metadata.any(
-              (metadata) => metadata.reflectee == typeAnnotatedWith));
-    }
-    
-    if (typeAnnotatedWithType != null) {
-      matchingBindings = matchingBindings.where(
+              (metadata) => metadata.reflectee == annotation));
+  
+  InjectorBindings classAnnotatedWithType(Type annotationType) =>
+      this.where(
           (binding) => reflectClass(binding.key.type).metadata.any(
               (metadata) => 
-                  metadata.reflectee.runtimeType == typeAnnotatedWithType));
-    }
-    
-    return matchingBindings.toList(growable: false);
-  }
+                  metadata.reflectee.runtimeType == annotationType));
+  
+  @override
+  InjectorBindings where(bool f(BayBinding)) =>
+    new InjectorBindings._(super.where(f));
+  
 }
 
 class BayBinding {

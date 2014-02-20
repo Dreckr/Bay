@@ -2,7 +2,7 @@ name: bay
 author: Diego Rocha <diego.rocha.comp@gmail.com>
 version: 0.0.1
 homepage: https://github.com/Dreckr/Bay
-description: .A pluggable framework for server-side development.
+description: A pluggable framework for server-side development.
 environment:
   sdk: '>=1.0.0'
 dependencies:
