@@ -7,3 +7,4 @@ export 'src/bay.dart';
 export 'src/handler.dart';
 export 'src/plugin.dart';
 export 'src/router.dart';
+export 'src/injector.dart';

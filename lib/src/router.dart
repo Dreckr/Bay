@@ -52,12 +52,3 @@ class ResourceNotFoundException implements Exception {
   String toString() => "Resource not found for: $path";
   
 }
-//
-//class MultipleMatchingResourcesError extends Error {
-//  final String path;
-//  
-//  MultipleMatchingResourcesError(String this.path);
-//  
-//  String toString() => "Multiple resources matching: $path";
-//  
-//}
