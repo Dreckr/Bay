@@ -34,17 +34,9 @@ abstract class Bay {
     if (httpServer != null) {
       return new Future.value(_init(modules, httpServer));
     } else {
-      var completer = new Completer<Bay>();
-      runZoned(() {
-        HttpServer.bind(address, port, backlog: backlog).then(
-            (httpServer) {
-              completer.complete(_init(modules, httpServer));
-            }, onError: (error, stackTrace) {
-              completer.completeError(error, stackTrace);
-            });
-      });
+      return HttpServer.bind(address, port, backlog: backlog).then(
+          (httpServer) => _init(modules, httpServer));
       
-      return completer.future;
     }
   }
   
@@ -54,24 +46,12 @@ abstract class Bay {
                                 {int backlog: 0, 
                                  String certificateName, 
                                  bool requestClientCertificate: false}) {
-    var completer = new Completer<Bay>();
-    runZoned(() {
-      HttpServer.bindSecure(address, 
-          port, 
-          backlog: backlog, 
-          certificateName: certificateName, 
-          requestClientCertificate: requestClientCertificate)
-            .then(
-                (httpServer) {
-                  completer.complete(_init(modules, httpServer));
-                }, onError: (error, stackTrace) {
-                  completer.completeError(error, stackTrace);
-                });
-    }, onError: (error, stackTrace) {
-      _coreLogger.severe("Uncaught error", error, stackTrace);
-    });
-    
-    return completer.future;
+    return HttpServer.bindSecure(address, 
+        port, 
+        backlog: backlog, 
+        certificateName: certificateName, 
+        requestClientCertificate: requestClientCertificate)
+          .then((httpServer) => (_init(modules, httpServer)));
   }
   
   static Bay _init(List<Module> modules, HttpServer httpServer) {
@@ -80,6 +60,8 @@ abstract class Bay {
     
     var bay = injector.getInstanceOf(Bay);
     bay.start();
+    
+    return bay;
   }
   
   Future close({bool force: false});
@@ -108,13 +90,13 @@ class _BayImpl implements Bay {
     _initiatePlugins();
   }
   
-  // TODO(diego): Handle onError and onDone
   _listenServer() {
     _logger.config("Address: ${httpServer.address}");
     _logger.config("Port: ${httpServer.port}");
-    httpServer.listen(_handleRequest, onError: (error, stackTrace) {
-      _logger.severe("HttpServer error", error, stackTrace);
-    });
+    
+    runZoned(
+      () => httpServer.listen(_handleRequest)
+      , onError: (error, stackTrace) {});
   }
   
   _handleRequest(HttpRequest request) {
@@ -129,8 +111,7 @@ class _BayImpl implements Bay {
     });
     
     router.handleRequest(request)
-      ..then(
-          (request) {
+      ..then((request) {
             if (request.connectionInfo != null) {
               _logger.finer("Responded HttpRequest from "
                   "${request.connectionInfo.remoteAddress}");
@@ -147,7 +128,7 @@ class _BayImpl implements Bay {
             request.response.close();
               
           })
-        ..whenComplete(() {
+      ..whenComplete(() {
           if (_pendingResponses.contains(request.response)) {
             request.response.close();
           }

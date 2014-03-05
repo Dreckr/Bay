@@ -15,7 +15,7 @@ class Router {
     requestHandlers = bindings.map(
         (binding) => binding.getInstance()).toList(growable: false);
     
-    requestHandlers.sort((a, b) => -a.priority.compareTo(b.priority));
+    requestHandlers.sort((a, b) => b.priority.compareTo(a.priority));
   }
   
   Future<HttpRequest> handleRequest(HttpRequest httpRequest) {
