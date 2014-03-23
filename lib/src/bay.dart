@@ -156,24 +156,19 @@ class _BayImpl implements Bay {
   
 }
 
-class _BayModule extends DeclarativeModule {
+class _BayModule extends BaseModule {
   
-  @Singleton
   HttpServer httpServer;
-  
-  @Singleton
-  _BayImpl bayImpl;
-  
-  @Singleton
-  Bay bay(_BayImpl bayImpl) => bayImpl;
-  
-  @Singleton
-  Router router;
-  
-  NotFoundRequestHandler notFoundHandler;
-  
-  InjectorBindings injectorBindings;
   
   _BayModule(this.httpServer);
   
+  @override
+  configure() {
+    bind(HttpServer).instance = httpServer;
+    bind(_BayImpl).scope = SingletonScope;
+    bind(Bay).rebinding = _BayImpl;
+    bind(Router).scope = SingletonScope;
+    bind(NotFoundRequestHandler);
+    bind(InjectorBindings);
+  }
 }
